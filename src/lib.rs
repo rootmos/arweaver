@@ -10,21 +10,35 @@ pub struct Client {
     url: Url,
 }
 
-pub struct BlockHash {
-    bytes: Vec<u8>,
-}
+#[derive(PartialEq, Eq)]
+pub struct BlockHash(Vec<u8>);
 
 impl BlockHash {
     pub fn encode(&self) -> String {
-        base64::encode_config(&self.bytes, base64::URL_SAFE_NO_PAD)
+        base64::encode_config(&self.0, base64::URL_SAFE_NO_PAD)
     }
 }
 
-#[derive(Deserialize)]
+impl fmt::Display for BlockHash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.encode())
+    }
+}
+
+impl fmt::Debug for BlockHash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "BlockHash({})", self.encode())
+    }
+}
+
+#[derive(Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Height(u64);
+
+#[derive(Deserialize, Debug)]
 pub struct Block {
     #[serde(rename = "indep_hash")]
     pub indep: BlockHash,
-    pub height: u64,
+    pub height: Height,
 }
 
 impl<'de> Deserialize<'de> for BlockHash {
@@ -37,8 +51,8 @@ impl<'de> Deserialize<'de> for BlockHash {
             }
 
             fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-                let mut bh = BlockHash { bytes: vec![0; 48] };
-                match base64::decode_config_slice(v, base64::URL_SAFE_NO_PAD, &mut bh.bytes) {
+                let mut bh = BlockHash(vec![0; 48]);
+                match base64::decode_config_slice(v, base64::URL_SAFE_NO_PAD, &mut bh.0) {
                     Ok(48) => Ok(bh),
                     _ => Err(de::Error::custom("should be 48 bytes base64 URL-safe encoded"))
                 }
@@ -51,7 +65,7 @@ impl<'de> Deserialize<'de> for BlockHash {
 
 #[derive(Deserialize)]
 pub struct Info {
-    pub height: u64,
+    pub height: Height,
     pub current: BlockHash,
 }
 
@@ -88,6 +102,10 @@ impl Client {
     pub fn block(&self, bh: &BlockHash) -> Result<Block, Error> {
         Ok(reqwest::get(self.url.join("block/hash/")?.join(&bh.encode())?)?.json()?)
     }
+
+    pub fn current_block(&self) -> Result<Block, Error> {
+        Ok(reqwest::get(self.url.join("block/current")?)?.json()?)
+    }
 }
 
 #[cfg(test)]
@@ -98,7 +116,7 @@ mod tests {
     fn info() {
         let c = Client::new().unwrap();
         let i = c.info().unwrap();
-        assert!(i.height > 316893);
+        assert!(i.height > Height(316893));
     }
 
     #[test]
@@ -107,5 +125,14 @@ mod tests {
         let i = c.info().unwrap();
         let b = c.block(&i.current).unwrap();
         assert_eq!(i.height, b.height);
+    }
+
+    #[test]
+    fn current_block() {
+        let c = Client::new().unwrap();
+        let b0 = c.current_block().unwrap();
+        let b1 = c.block(&b0.indep).unwrap();
+        assert_eq!(b0.indep, b1.indep);
+        assert_eq!(b0.height, b1.height);
     }
 }
