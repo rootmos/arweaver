@@ -11,7 +11,20 @@ pub struct Client {
 }
 
 pub struct BlockHash {
-    bytes: [u8; 48],
+    bytes: Vec<u8>,
+}
+
+impl BlockHash {
+    pub fn encode(&self) -> String {
+        base64::encode_config(&self.bytes, base64::URL_SAFE_NO_PAD)
+    }
+}
+
+#[derive(Deserialize)]
+pub struct Block {
+    #[serde(rename = "indep_hash")]
+    pub indep: BlockHash,
+    pub height: u64,
 }
 
 impl<'de> Deserialize<'de> for BlockHash {
@@ -24,9 +37,8 @@ impl<'de> Deserialize<'de> for BlockHash {
             }
 
             fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-                let mut bh = BlockHash { bytes: [0; 48] };
-                let c = base64::Config::new(base64::CharacterSet::UrlSafe, false);
-                match base64::decode_config_slice(v, c, &mut bh.bytes) {
+                let mut bh = BlockHash { bytes: vec![0; 48] };
+                match base64::decode_config_slice(v, base64::URL_SAFE_NO_PAD, &mut bh.bytes) {
                     Ok(48) => Ok(bh),
                     _ => Err(de::Error::custom("should be 48 bytes base64 URL-safe encoded"))
                 }
@@ -72,6 +84,10 @@ impl Client {
     pub fn info(&self) -> Result<Info, Error> {
         Ok(reqwest::get(self.url.join("info")?)?.json()?)
     }
+
+    pub fn block(&self, bh: &BlockHash) -> Result<Block, Error> {
+        Ok(reqwest::get(self.url.join("block/hash/")?.join(&bh.encode())?)?.json()?)
+    }
 }
 
 #[cfg(test)]
@@ -83,5 +99,13 @@ mod tests {
         let c = Client::new().unwrap();
         let i = c.info().unwrap();
         assert!(i.height > 316893);
+    }
+
+    #[test]
+    fn block() {
+        let c = Client::new().unwrap();
+        let i = c.info().unwrap();
+        let b = c.block(&i.current).unwrap();
+        assert_eq!(i.height, b.height);
     }
 }
