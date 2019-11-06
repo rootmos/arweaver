@@ -1,0 +1,9 @@
+[package]
+name = "libarweave"
+version = "0.1.0"
+authors = ["Gustav Behm <me@rootmos.io>"]
+edition = "2018"
+
+[dependencies]
+reqwest = "0.9.22"
+serde = "1.0.102"
