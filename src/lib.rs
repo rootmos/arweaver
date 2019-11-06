@@ -1,4 +1,7 @@
-use serde::{Deserialize};
+use std::fmt;
+
+use serde::{Deserialize, Deserializer};
+use serde::de;
 
 extern crate reqwest;
 use reqwest::Url;
@@ -7,9 +10,37 @@ pub struct Client {
     url: Url,
 }
 
+pub struct BlockHash {
+    bytes: [u8; 48],
+}
+
+impl<'de> Deserialize<'de> for BlockHash {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct BlockHashVisitor;
+        impl<'de> de::Visitor<'de> for BlockHashVisitor {
+            type Value = BlockHash;
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("block hash")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                let mut bh = BlockHash { bytes: [0; 48] };
+                let c = base64::Config::new(base64::CharacterSet::UrlSafe, false);
+                match base64::decode_config_slice(v, c, &mut bh.bytes) {
+                    Ok(48) => Ok(bh),
+                    _ => Err(de::Error::custom("should be 48 bytes base64 URL-safe encoded"))
+                }
+            }
+        }
+
+        deserializer.deserialize_str(BlockHashVisitor)
+    }
+}
+
 #[derive(Deserialize)]
 pub struct Info {
-    pub height: u64
+    pub height: u64,
+    pub current: BlockHash,
 }
 
 #[derive(Debug)]
@@ -39,7 +70,7 @@ impl Client {
     }
 
     pub fn info(&self) -> Result<Info, Error> {
-        Ok(reqwest::get(self.url.join("/info")?)?.json()?)
+        Ok(reqwest::get(self.url.join("info")?)?.json()?)
     }
 }
 
