@@ -31,13 +31,34 @@ impl fmt::Debug for BlockHash {
     }
 }
 
-#[derive(Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct Height(u64);
+
+impl std::convert::From<u64> for Height {
+    fn from(n: u64) -> Self { Self(n) }
+}
+
+impl std::ops::Add for Height {
+    type Output = Self;
+    fn add(self, other: Self) -> Self { Self(self.0 + other.0) }
+}
+
+impl std::ops::Sub for Height {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        if self.0 < other.0 {
+            Self(0)
+        } else {
+            Self(self.0 - other.0)
+        }
+    }
+}
 
 #[derive(Deserialize, Debug)]
 pub struct Block {
     #[serde(rename = "indep_hash")]
     pub indep: BlockHash,
+    pub previous_block: BlockHash,
     pub height: Height,
 }
 
@@ -103,6 +124,10 @@ impl Client {
         Ok(reqwest::get(self.url.join("block/hash/")?.join(&bh.encode())?)?.json()?)
     }
 
+    pub fn height(&self, h: Height) -> Result<Block, Error> {
+        Ok(reqwest::get(self.url.join("block/height/")?.join(&h.0.to_string())?)?.json()?)
+    }
+
     pub fn current_block(&self) -> Result<Block, Error> {
         Ok(reqwest::get(self.url.join("block/current")?)?.json()?)
     }
@@ -123,8 +148,13 @@ mod tests {
     fn block() {
         let c = Client::new().unwrap();
         let i = c.info().unwrap();
-        let b = c.block(&i.current).unwrap();
-        assert_eq!(i.height, b.height);
+        let b0 = c.block(&i.current).unwrap();
+        assert_eq!(b0.indep, i.current);
+        assert_eq!(i.height, b0.height);
+
+        let b1 = c.block(&b0.previous_block).unwrap();
+        assert_eq!(b1.indep, b0.previous_block);
+        assert_eq!(b1.height + Height::from(1), b0.height);
     }
 
     #[test]
@@ -134,5 +164,19 @@ mod tests {
         let b1 = c.block(&b0.indep).unwrap();
         assert_eq!(b0.indep, b1.indep);
         assert_eq!(b0.height, b1.height);
+    }
+
+    #[test]
+    fn height() {
+        let c = Client::new().unwrap();
+        let i = c.info().unwrap();
+
+        let b0 = c.height(i.height).unwrap();
+        assert_eq!(b0.indep, i.current);
+        assert_eq!(b0.height, i.height);
+
+        let b1 = c.height(i.height - Height::from(1)).unwrap();
+        assert_eq!(b1.indep, b0.previous_block);
+        assert_eq!(b1.height + Height::from(1), b0.height);
     }
 }
