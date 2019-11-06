@@ -1,5 +1,5 @@
 [package]
-name = "libarweave"
+name = "arweave"
 version = "0.1.0"
 authors = ["Gustav Behm <me@rootmos.io>"]
 edition = "2018"
