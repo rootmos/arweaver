@@ -16,8 +16,8 @@ fn block() {
     assert_eq!(b0.indep, i.current);
     assert_eq!(i.height, b0.height);
 
-    let b1 = c.block(&b0.previous_block).unwrap();
-    assert_eq!(b1.indep, b0.previous_block);
+    let b1 = c.block(b0.previous_block().unwrap()).unwrap();
+    assert_eq!(Some(&b1.indep), b0.previous_block());
     assert_eq!(b1.height + Height::from(1), b0.height);
     assert!(b1.timestamp < b0.timestamp);
 }
@@ -43,9 +43,16 @@ fn height() {
     assert_eq!(b0.height, i.height);
 
     let b1 = c.height(i.height - Height::from(1)).unwrap();
-    assert_eq!(b1.indep, b0.previous_block);
+    assert_eq!(Some(&b1.indep), b0.previous_block());
     assert_eq!(b1.height + Height::from(1), b0.height);
     assert!(b1.timestamp < b0.timestamp);
+}
+
+#[test]
+fn genesis_block() {
+    let c = Client::new().unwrap();
+    let b = c.height(Height::from(0)).unwrap();
+    assert!(b.previous_block().is_none());
 }
 
 #[test]

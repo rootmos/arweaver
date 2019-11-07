@@ -16,8 +16,13 @@ impl Error {
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unimplemented!();
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::IoError(e) => write!(f, "io: {}", e),
+            Error::ReqwestError(e) => write!(f, "request: {}", e),
+            Error::UrlError(e) => write!(f, "url: {}", e),
+            Error::InvalidValue { thing, msg } => write!(f, "parsing {}: {}", thing, msg),
+        }
     }
 }
 

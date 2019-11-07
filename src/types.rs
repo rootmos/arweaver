@@ -1,5 +1,6 @@
 use std::fmt;
 use std::convert::From;
+use std::marker::PhantomData;
 
 use crate::error::Error;
 
@@ -7,6 +8,51 @@ use chrono::{DateTime, Utc};
 use num_bigint::BigUint;
 use serde::de;
 use serde::{Deserialize, Deserializer};
+use serde::de::{IntoDeserializer};
+
+#[derive(Debug, Clone, Copy)]
+pub struct EmptyStringAsNone<T>(Option<T>);
+
+impl<T> EmptyStringAsNone<T> {
+    pub fn as_option(self) -> Option<T> { self.0 }
+    pub fn as_option_ref(&self) -> Option<&T> { self.0.as_ref() }
+}
+
+impl<T> From<Option<T>> for EmptyStringAsNone<T> {
+    fn from(ot: Option<T>) -> Self { Self(ot) }
+}
+
+struct EmptyStringAsNoneVisitor<T> {
+    marker: PhantomData<T>
+}
+
+impl<'de, T> de::Visitor<'de> for EmptyStringAsNoneVisitor<T>
+where
+    T: Deserialize<'de>
+{
+    type Value = EmptyStringAsNone<T>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("empty string as absent value")
+    }
+
+    fn visit_str<E: de::Error>(self, s: &str) -> Result<Self::Value, E> {
+        if s.len() == 0 {
+            Ok(EmptyStringAsNone(None))
+        } else {
+            T::deserialize(s.into_deserializer()).map(|t| EmptyStringAsNone(Some(t)))
+        }
+    }
+}
+
+impl<'de, T> Deserialize<'de> for EmptyStringAsNone<T>
+where
+    T: Deserialize<'de>,
+{
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_str(EmptyStringAsNoneVisitor { marker: PhantomData })
+    }
+}
 
 #[derive(PartialEq, Eq, Clone)]
 pub struct BlockHash(Vec<u8>);
@@ -101,11 +147,17 @@ impl AsRef<Height> for Height {
 pub struct Block {
     #[serde(rename = "indep_hash")]
     pub indep: BlockHash,
-    pub previous_block: BlockHash,
+    previous_block: EmptyStringAsNone<BlockHash>,
     pub height: Height,
     pub txs: Vec<TxHash>,
     #[serde(with = "chrono::serde::ts_seconds")]
     pub timestamp: DateTime<Utc>,
+}
+
+impl Block {
+    pub fn previous_block(&self) -> Option<&BlockHash> {
+        self.previous_block.as_option_ref()
+    }
 }
 
 
