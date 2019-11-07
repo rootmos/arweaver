@@ -15,10 +15,11 @@ pub fn block_with_transactions() -> (BlockHash, DateTime<Utc>)  {
     (bh, ts)
 }
 
-pub fn data_transaction() -> (TxHash, Winstons) {
+pub fn data_transaction() -> (TxHash, Winstons, Anchor) {
     let h = TxHash::decode("et36AGA5eo4HzVNi39nSvTbltzhoRPq643MzzwrH38w").unwrap();
     let r = Winstons::from(42360199u64);
-    (h, r)
+    let a = Anchor::Block(BlockHash::decode("2serU-303rThvozelaLz67ftihCw7cJPAEF40SkPkfyvz92Z5gCKVfhadoVU3ZRg").unwrap());
+    (h, r, a)
 }
 
 pub fn transfer_transaction() -> (TxHash, Winstons, Winstons, Address) {

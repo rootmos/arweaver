@@ -73,12 +73,13 @@ fn txs() {
 #[test]
 fn tx_data_style() {
     let c = Client::new().unwrap();
-    let (txh, r) = settings::data_transaction();
+    let (txh, r, a) = settings::data_transaction();
     let t = c.tx(&txh).unwrap();
     assert_eq!(t.id, txh);
     assert_ne!(t.data.len(), 0);
     assert_eq!(t.quantity, Winstons::from(0u32));
     assert_eq!(t.reward, r);
+    assert_eq!(t.last_tx, a);
     assert!(t.target().is_none());
 }
 

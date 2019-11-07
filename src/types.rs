@@ -348,6 +348,39 @@ impl<'de> Deserialize<'de> for Address {
 }
 
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum Anchor {
+    Block(BlockHash),
+    Transaction(Option<TxHash>),
+}
+
+impl<'de> Deserialize<'de> for Anchor {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct AnchorVisitor;
+        impl<'de> de::Visitor<'de> for AnchorVisitor {
+            type Value = Anchor;
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("anchor")
+            }
+
+            fn visit_str<E: de::Error>(self, s: &str) -> Result<Self::Value, E> {
+                if s.len() == 0 {
+                    Ok(Anchor::Transaction(None))
+                } else {
+                    BlockHash::deserialize(s.into_deserializer()).map(Anchor::Block)
+                        .or_else(|_: E| {
+                            TxHash::deserialize(s.into_deserializer())
+                                .map(Some).map(Anchor::Transaction)
+                        })
+                }
+            }
+        }
+
+        deserializer.deserialize_str(AnchorVisitor)
+    }
+}
+
+
 #[derive(Deserialize, Debug)]
 pub struct Tx {
     pub id: TxHash,
@@ -355,6 +388,7 @@ pub struct Tx {
     pub quantity: Winstons,
     pub reward: Winstons,
     target: EmptyStringAsNone<Address>,
+    pub last_tx: Anchor,
 }
 
 impl Tx {
