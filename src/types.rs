@@ -87,7 +87,7 @@ impl fmt::Debug for BlockHash {
 }
 
 impl AsRef<BlockHash> for BlockHash {
-    #[inline] fn as_ref(&self) -> &BlockHash { self }
+    #[inline] fn as_ref(&self) -> &Self { self }
 }
 
 impl<'de> Deserialize<'de> for BlockHash {
@@ -139,7 +139,7 @@ impl std::ops::Sub for Height {
 }
 
 impl AsRef<Height> for Height {
-    #[inline] fn as_ref(&self) -> &Height { self }
+    #[inline] fn as_ref(&self) -> &Self { self }
 }
 
 
@@ -200,7 +200,7 @@ impl fmt::Debug for TxHash {
 }
 
 impl AsRef<TxHash> for TxHash {
-    #[inline] fn as_ref(&self) -> &TxHash { self }
+    #[inline] fn as_ref(&self) -> &Self { self }
 }
 
 impl<'de> Deserialize<'de> for TxHash {
@@ -293,10 +293,72 @@ impl<'de> Deserialize<'de> for Winstons {
 }
 
 
+#[derive(PartialEq, Eq, Clone)]
+pub struct Address(Vec<u8>);
+
+impl Address {
+    pub fn encode(&self) -> String {
+        base64::encode_config(&self.0, base64::URL_SAFE_NO_PAD)
+    }
+
+    pub fn decode<T: AsRef<[u8]>>(t: T) -> Result<Self, Error> {
+        let mut a = Address(vec![0; 32]);
+        match base64::decode_config_slice(&t, base64::URL_SAFE_NO_PAD, &mut a.0) {
+            Ok(32) => Ok(a),
+            Ok(_) => Err(Error::invalid_value(
+                    "address", "invalid length (should be 32 bytes)")),
+            Err(_) => Err(Error::invalid_value(
+                    "address", "invalid format (should be base64 URL-safe without padding)")),
+        }
+    }
+}
+
+impl fmt::Display for Address {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.encode())
+    }
+}
+
+impl fmt::Debug for Address {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Address({})", self.encode())
+    }
+}
+
+impl AsRef<Address> for Address {
+    #[inline] fn as_ref(&self) -> &Self { self }
+}
+
+impl<'de> Deserialize<'de> for Address {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct AddressVisitor;
+        impl<'de> de::Visitor<'de> for AddressVisitor {
+            type Value = Address;
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("address")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                Address::decode(v).map_err(|e| de::Error::custom(e))
+            }
+        }
+
+        deserializer.deserialize_str(AddressVisitor)
+    }
+}
+
+
 #[derive(Deserialize, Debug)]
 pub struct Tx {
     pub id: TxHash,
     pub data: Data,
     pub quantity: Winstons,
     pub reward: Winstons,
+    target: EmptyStringAsNone<Address>,
+}
+
+impl Tx {
+    pub fn target(&self) -> Option<&Address> {
+        self.target.as_option_ref()
+    }
 }

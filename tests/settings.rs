@@ -21,9 +21,10 @@ pub fn data_transaction() -> (TxHash, Winstons) {
     (h, r)
 }
 
-pub fn transfer_transaction() -> (TxHash, Winstons, Winstons) {
+pub fn transfer_transaction() -> (TxHash, Winstons, Winstons, Address) {
     let h = TxHash::decode("lDNUhC3hKrTny4p6ugLACPyQtXP0f8Rax8v2zfCkmbY").unwrap();
     let q = Winstons::from(999983832752u64);
     let r = Winstons::from(16167248u64);
-    (h, r, q)
+    let to = Address::decode("9E6crGMid_s7MHrn21JQ9lkL-FXLnoflRV_nISHLA5k").unwrap();
+    (h, r, q, to)
 }
