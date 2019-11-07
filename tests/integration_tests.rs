@@ -1,4 +1,5 @@
 use arweave::*;
+mod settings;
 
 #[test]
 fn info() {
@@ -41,4 +42,15 @@ fn height() {
     let b1 = c.height(i.height - Height::from(1)).unwrap();
     assert_eq!(b1.indep, b0.previous_block);
     assert_eq!(b1.height + Height::from(1), b0.height);
+}
+
+#[test]
+fn txs() {
+    let c = Client::new().unwrap();
+    let txs = c.block(settings::block_with_transactions()).unwrap().txs;
+    assert!(txs.len() > 0);
+    for txh in txs {
+        let tx = c.tx(&txh).unwrap();
+        assert_eq!(txh, tx.id);
+    }
 }

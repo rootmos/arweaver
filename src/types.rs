@@ -1,14 +1,21 @@
 use std::fmt;
 
+use crate::error::Error;
+
 use serde::{Deserialize, Deserializer};
 use serde::de;
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct BlockHash(Vec<u8>);
 
 impl BlockHash {
     pub fn encode(&self) -> String {
         base64::encode_config(&self.0, base64::URL_SAFE_NO_PAD)
+    }
+
+    pub fn decode<T: AsRef<[u8]>>(t: T) -> Result<Self, Error> {
+        base64::decode_config(&t, base64::URL_SAFE_NO_PAD)
+            .map(Self).map_err(Error::from)
     }
 }
 
@@ -24,6 +31,10 @@ impl fmt::Debug for BlockHash {
     }
 }
 
+impl AsRef<BlockHash> for BlockHash {
+    #[inline] fn as_ref(&self) -> &BlockHash { self }
+}
+
 
 #[derive(Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct Height(u64);
@@ -35,7 +46,7 @@ impl fmt::Display for Height {
 }
 
 impl std::convert::From<u64> for Height {
-    fn from(n: u64) -> Self { Self(n) }
+    #[inline] fn from(n: u64) -> Self { Self(n) }
 }
 
 impl std::ops::Add for Height {
@@ -54,6 +65,9 @@ impl std::ops::Sub for Height {
     }
 }
 
+impl AsRef<Height> for Height {
+    #[inline] fn as_ref(&self) -> &Height { self }
+}
 
 #[derive(Deserialize, Debug)]
 pub struct Block {
@@ -61,6 +75,7 @@ pub struct Block {
     pub indep: BlockHash,
     pub previous_block: BlockHash,
     pub height: Height,
+    pub txs: Vec<TxHash>,
 }
 
 impl<'de> Deserialize<'de> for BlockHash {
@@ -89,4 +104,57 @@ impl<'de> Deserialize<'de> for BlockHash {
 pub struct Info {
     pub height: Height,
     pub current: BlockHash,
+}
+
+#[derive(PartialEq, Eq, Clone)]
+pub struct TxHash(Vec<u8>);
+
+impl TxHash {
+    pub fn encode(&self) -> String {
+        base64::encode_config(&self.0, base64::URL_SAFE_NO_PAD)
+    }
+}
+
+impl fmt::Display for TxHash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.encode())
+    }
+}
+
+impl fmt::Debug for TxHash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "BlockHash({})", self.encode())
+    }
+}
+
+impl AsRef<TxHash> for TxHash {
+    #[inline] fn as_ref(&self) -> &TxHash { self }
+}
+
+impl<'de> Deserialize<'de> for TxHash {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct TxHashVisitor;
+        impl<'de> de::Visitor<'de> for TxHashVisitor {
+            type Value = TxHash;
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("transaction hash")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                let mut txh = TxHash(vec![0; 32]);
+                match base64::decode_config_slice(v, base64::URL_SAFE_NO_PAD, &mut txh.0) {
+                    Ok(32) => Ok(txh),
+                    _ => Err(de::Error::custom("should be 32 bytes base64 URL-safe encoded"))
+                }
+            }
+        }
+
+        deserializer.deserialize_str(TxHashVisitor)
+    }
+}
+
+
+#[derive(Deserialize, Debug)]
+pub struct Tx {
+    pub id: TxHash,
 }

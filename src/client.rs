@@ -2,28 +2,10 @@ extern crate reqwest;
 use reqwest::Url;
 
 use crate::types::*;
+use crate::error::*;
 
 pub struct Client {
     url: Url,
-}
-
-#[derive(Debug)]
-pub enum Error {
-    IoError(std::io::Error),
-    UrlError(reqwest::UrlError),
-    ReqwestError(reqwest::Error),
-}
-
-impl std::convert::From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self { Error::IoError(e) }
-}
-
-impl std::convert::From<reqwest::Error> for Error {
-    fn from(e: reqwest::Error) -> Self { Error::ReqwestError(e) }
-}
-
-impl std::convert::From<reqwest::UrlError> for Error {
-    fn from(e: reqwest::UrlError) -> Self { Error::UrlError(e) }
 }
 
 impl Client {
@@ -37,15 +19,19 @@ impl Client {
         Ok(reqwest::get(self.url.join("info")?)?.json()?)
     }
 
-    pub fn block(&self, bh: &BlockHash) -> Result<Block, Error> {
-        Ok(reqwest::get(self.url.join("block/hash/")?.join(&bh.encode())?)?.json()?)
+    pub fn block<T: AsRef<BlockHash>>(&self, t: T) -> Result<Block, Error> {
+        Ok(reqwest::get(self.url.join("block/hash/")?.join(&t.as_ref().encode())?)?.json()?)
     }
 
-    pub fn height(&self, h: Height) -> Result<Block, Error> {
-        Ok(reqwest::get(self.url.join("block/height/")?.join(&h.to_string())?)?.json()?)
+    pub fn height<T: AsRef<Height>>(&self, t: T) -> Result<Block, Error> {
+        Ok(reqwest::get(self.url.join("block/height/")?.join(&t.as_ref().to_string())?)?.json()?)
     }
 
     pub fn current_block(&self) -> Result<Block, Error> {
         Ok(reqwest::get(self.url.join("block/current")?)?.json()?)
+    }
+
+    pub fn tx<T: AsRef<TxHash>>(&self, t: T) -> Result<Tx, Error> {
+        Ok(reqwest::get(self.url.join("tx/")?.join(&t.as_ref().encode())?)?.json()?)
     }
 }
