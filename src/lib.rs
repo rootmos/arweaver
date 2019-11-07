@@ -1,3 +1,6 @@
+extern crate num_bigint;
+extern crate reqwest;
+
 mod types;
 pub use crate::types::*;
 

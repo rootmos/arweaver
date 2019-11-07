@@ -1,11 +1,12 @@
 use std::fmt;
+use std::convert::From;
 
 use crate::error::Error;
 
 use chrono::{DateTime, Utc};
-
-use serde::{Deserialize, Deserializer};
+use num_bigint::BigUint;
 use serde::de;
+use serde::{Deserialize, Deserializer};
 
 #[derive(PartialEq, Eq, Clone)]
 pub struct BlockHash(Vec<u8>);
@@ -71,7 +72,7 @@ impl fmt::Display for Height {
     }
 }
 
-impl std::convert::From<u64> for Height {
+impl From<u64> for Height {
     #[inline] fn from(n: u64) -> Self { Self(n) }
 }
 
@@ -94,6 +95,7 @@ impl std::ops::Sub for Height {
 impl AsRef<Height> for Height {
     #[inline] fn as_ref(&self) -> &Height { self }
 }
+
 
 #[derive(Deserialize, Debug)]
 pub struct Block {
@@ -200,9 +202,48 @@ impl<'de> Deserialize<'de> for Data {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Winstons(BigUint);
+
+impl Winstons {
+    pub fn decode<T: AsRef<[u8]>>(t: T) -> Result<Self, Error> {
+        BigUint::parse_bytes(t.as_ref(), 10).map(Self).ok_or(
+            Error::invalid_value("a non-negative decimal number of Winstons", "invalid format"))
+    }
+}
+
+impl fmt::Display for Winstons {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl<T> From<T> for Winstons where T: Into<BigUint> {
+    #[inline] fn from(t: T) -> Self { Self(t.into()) }
+}
+
+impl<'de> Deserialize<'de> for Winstons {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct WinstonsVisitor;
+        impl<'de> de::Visitor<'de> for WinstonsVisitor {
+            type Value = Winstons;
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a non-negative amount of Winstons")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                Winstons::decode(v).map_err(|e| de::Error::custom(e))
+            }
+        }
+
+        deserializer.deserialize_str(WinstonsVisitor)
+    }
+}
+
 
 #[derive(Deserialize, Debug)]
 pub struct Tx {
     pub id: TxHash,
     pub data: Data,
+    pub quantity: Winstons,
 }

@@ -1,4 +1,3 @@
-extern crate reqwest;
 use reqwest::Url;
 
 use crate::types::*;

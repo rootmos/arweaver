@@ -15,6 +15,8 @@ pub fn data_transaction() -> TxHash {
     TxHash::decode("et36AGA5eo4HzVNi39nSvTbltzhoRPq643MzzwrH38w").unwrap()
 }
 
-pub fn transfer_transaction() -> TxHash {
-    TxHash::decode("lDNUhC3hKrTny4p6ugLACPyQtXP0f8Rax8v2zfCkmbY").unwrap()
+pub fn transfer_transaction() -> (TxHash, Winstons) {
+    let h = TxHash::decode("lDNUhC3hKrTny4p6ugLACPyQtXP0f8Rax8v2zfCkmbY").unwrap();
+    let q = Winstons::from(999983832752u64);
+    (h, q)
 }
