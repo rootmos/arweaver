@@ -2,6 +2,8 @@ use std::fmt;
 
 use crate::error::Error;
 
+use chrono::{DateTime, Utc};
+
 use serde::{Deserialize, Deserializer};
 use serde::de;
 
@@ -76,6 +78,8 @@ pub struct Block {
     pub previous_block: BlockHash,
     pub height: Height,
     pub txs: Vec<TxHash>,
+    #[serde(with = "chrono::serde::ts_seconds")]
+    pub timestamp: DateTime<Utc>,
 }
 
 impl<'de> Deserialize<'de> for BlockHash {

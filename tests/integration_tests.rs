@@ -5,7 +5,7 @@ mod settings;
 fn info() {
     let c = Client::new().unwrap();
     let i = c.info().unwrap();
-    assert!(i.height > Height::from(316893));
+    assert!(i.height > settings::recent_block_height());
 }
 
 #[test]
@@ -47,9 +47,13 @@ fn height() {
 #[test]
 fn txs() {
     let c = Client::new().unwrap();
-    let txs = c.block(settings::block_with_transactions()).unwrap().txs;
-    assert!(txs.len() > 0);
-    for txh in txs {
+    let (bh, ts) = settings::block_with_transactions();
+
+    let b = c.block(bh).unwrap();
+    assert_eq!(b.timestamp, ts);
+
+    assert!(b.txs.len() > 0);
+    for txh in b.txs {
         let tx = c.tx(&txh).unwrap();
         assert_eq!(txh, tx.id);
     }
