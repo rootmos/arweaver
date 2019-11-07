@@ -58,3 +58,17 @@ fn txs() {
         assert_eq!(txh, tx.id);
     }
 }
+
+#[test]
+fn tx_data_style() {
+    let c = Client::new().unwrap();
+    let t = c.tx(settings::data_transaction()).unwrap();
+    assert!(t.data.len() > 0);
+}
+
+#[test]
+fn tx_transfer_style() {
+    let c = Client::new().unwrap();
+    let t = c.tx(settings::transfer_transaction()).unwrap();
+    assert_eq!(t.data.len(), 0);
+}
