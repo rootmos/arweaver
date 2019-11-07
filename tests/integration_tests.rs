@@ -62,19 +62,21 @@ fn txs() {
 #[test]
 fn tx_data_style() {
     let c = Client::new().unwrap();
-    let txh = settings::data_transaction();
+    let (txh, r) = settings::data_transaction();
     let t = c.tx(&txh).unwrap();
     assert_eq!(t.id, txh);
     assert!(t.data.len() > 0);
     assert_eq!(t.quantity, Winstons::from(0u32));
+    assert_eq!(t.reward, r);
 }
 
 #[test]
 fn tx_transfer_style() {
     let c = Client::new().unwrap();
-    let (txh, q) = settings::transfer_transaction();
+    let (txh, r, q) = settings::transfer_transaction();
     let t = c.tx(&txh).unwrap();
     assert_eq!(t.id, txh);
     assert_eq!(t.data.len(), 0);
     assert_eq!(t.quantity, q);
+    assert_eq!(t.reward, r);
 }

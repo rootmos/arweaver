@@ -246,4 +246,5 @@ pub struct Tx {
     pub id: TxHash,
     pub data: Data,
     pub quantity: Winstons,
+    pub reward: Winstons,
 }
