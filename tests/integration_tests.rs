@@ -86,11 +86,13 @@ fn tx_data_style() {
 #[test]
 fn tx_transfer_style() {
     let c = Client::new().unwrap();
-    let (txh, r, q, to) = settings::transfer_transaction();
+    let (txh, r, q, a, from, to) = settings::transfer_transaction();
     let t = c.tx(&txh).unwrap();
     assert_eq!(t.id, txh);
     assert_eq!(t.data.len(), 0);
     assert_eq!(t.quantity, q);
     assert_eq!(t.reward, r);
+    assert_eq!(t.anchor, a);
+    assert_eq!(t.owner.address().unwrap(), from);
     assert_eq!(Some(&to), t.target());
 }

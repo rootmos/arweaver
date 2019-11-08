@@ -6,6 +6,7 @@ pub enum Error {
     IoError(std::io::Error),
     UrlError(reqwest::UrlError),
     ReqwestError(reqwest::Error),
+    OpensslError(openssl::error::ErrorStack),
     InvalidValue { thing: String, msg: String },
 }
 
@@ -21,6 +22,7 @@ impl fmt::Display for Error {
             Error::IoError(e) => write!(f, "io: {}", e),
             Error::ReqwestError(e) => write!(f, "request: {}", e),
             Error::UrlError(e) => write!(f, "url: {}", e),
+            Error::OpensslError(e) => write!(f, "openssl: {}", e),
             Error::InvalidValue { thing, msg } => write!(f, "parsing {}: {}", thing, msg),
         }
     }
@@ -36,4 +38,8 @@ impl From<reqwest::Error> for Error {
 
 impl From<reqwest::UrlError> for Error {
     fn from(e: reqwest::UrlError) -> Self { Error::UrlError(e) }
+}
+
+impl From<openssl::error::ErrorStack> for Error {
+    fn from(e: openssl::error::ErrorStack) -> Self { Error::OpensslError(e) }
 }

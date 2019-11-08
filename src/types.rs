@@ -6,6 +6,8 @@ use crate::error::Error;
 
 use chrono::{DateTime, Utc};
 use num_bigint::BigUint;
+use openssl::bn::BigNum;
+use openssl::hash::{MessageDigest, hash};
 use serde::de;
 use serde::{Deserialize, Deserializer};
 use serde::de::{IntoDeserializer};
@@ -381,6 +383,42 @@ impl<'de> Deserialize<'de> for Anchor {
 }
 
 
+#[derive(Debug)]
+pub struct Owner { n: BigNum }
+
+impl Owner {
+    pub fn address(&self) -> Result<Address, Error> {
+        hash(MessageDigest::sha256(), &self.n.to_vec()).map_err(Error::from)
+            .map(|bs| Address(bs.to_vec()))
+    }
+}
+
+impl<'de> Deserialize<'de> for Owner {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct OwnerVisitor;
+        impl<'de> de::Visitor<'de> for OwnerVisitor {
+            type Value = Owner;
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("owner")
+            }
+
+            fn visit_str<E: de::Error>(self, s: &str) -> Result<Self::Value, E> {
+                base64::decode_config(s, base64::URL_SAFE_NO_PAD)
+                    .map_err(|_| {
+                        Error::invalid_value("owner",
+                            "expected big-endian bytes base64 encoded (URL-safe w/o padding)")
+                    })
+                    .and_then(|bs| BigNum::from_slice(&bs).map_err(Error::from))
+                    .map(|n| Owner { n })
+                    .map_err(|e| de::Error::custom(e))
+            }
+        }
+
+        deserializer.deserialize_str(OwnerVisitor)
+    }
+}
+
+
 #[derive(Deserialize, Debug)]
 pub struct Tx {
     pub id: TxHash,
@@ -390,6 +428,7 @@ pub struct Tx {
     target: EmptyStringAsNone<Address>,
     #[serde(rename = "last_tx")]
     pub anchor: Anchor,
+    pub owner: Owner,
 }
 
 impl Tx {

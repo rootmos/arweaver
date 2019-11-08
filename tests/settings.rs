@@ -22,10 +22,12 @@ pub fn data_transaction() -> (TxHash, Winstons, Anchor) {
     (h, r, a)
 }
 
-pub fn transfer_transaction() -> (TxHash, Winstons, Winstons, Address) {
-    let h = TxHash::decode("lDNUhC3hKrTny4p6ugLACPyQtXP0f8Rax8v2zfCkmbY").unwrap();
-    let q = Winstons::from(999983832752u64);
-    let r = Winstons::from(16167248u64);
-    let to = Address::decode("9E6crGMid_s7MHrn21JQ9lkL-FXLnoflRV_nISHLA5k").unwrap();
-    (h, r, q, to)
+pub fn transfer_transaction() -> (TxHash, Winstons, Winstons, Anchor, Address, Address) {
+    let h = TxHash::decode("wbezNDNLwOf7qIYEtyHCjRs_kUafeiGF28REpip6DU8").unwrap();
+    let q = Winstons::from(339000000000000u64);
+    let r = Winstons::from(321179212u64);
+    let a = Anchor::Transaction(Some(TxHash::decode("CCH2h2MzMP7WMh0Xf3GYL7zZDbU7E4CZPJWngp1qmDc").unwrap()));
+    let from = Address::decode("_1on1ufdt7Pye8VBn9om-9fBI43kzKYKrYyb_ShfECg").unwrap();
+    let to = Address::decode("T22ykpEoUQerm0_8wSpiOE_2xUOGmG1lnf7niSiQlaU").unwrap();
+    (h, r, q, a, from, to)
 }

@@ -1,5 +1,6 @@
 extern crate num_bigint;
 extern crate reqwest;
+extern crate openssl;
 
 mod types;
 pub use crate::types::*;

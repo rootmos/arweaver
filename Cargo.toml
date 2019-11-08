@@ -10,3 +10,4 @@ serde = "1.0.102"
 base64 = "0.11.0"
 chrono = { version = "0.4.9", features = ["serde"] }
 num-bigint = "0.2.3"
+openssl = "0.10.25"
