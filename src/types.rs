@@ -8,6 +8,8 @@ use chrono::{DateTime, Utc};
 use num_bigint::BigUint;
 use openssl::bn::BigNum;
 use openssl::hash::{MessageDigest, hash};
+use openssl::rsa::Rsa;
+use openssl::pkey::Public;
 use serde::de;
 use serde::{Deserialize, Deserializer};
 use serde::de::{IntoDeserializer};
@@ -390,6 +392,11 @@ impl Owner {
     pub fn address(&self) -> Result<Address, Error> {
         hash(MessageDigest::sha256(), &self.n.to_vec()).map_err(Error::from)
             .map(|bs| Address(bs.to_vec()))
+    }
+
+    pub fn pubkey(&self) -> Result<Rsa<Public>, Error> {
+        // https://github.com/ArweaveTeam/arweave/blob/aef590a2e7fbc2703d47449c121058a77916ce16/src/ar_wallet.erl#L15
+        Ok(Rsa::from_public_components(self.n.to_owned()?, BigNum::from_u32(65537u32)?)?)
     }
 }
 
