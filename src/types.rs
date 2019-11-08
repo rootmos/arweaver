@@ -388,7 +388,8 @@ pub struct Tx {
     pub quantity: Winstons,
     pub reward: Winstons,
     target: EmptyStringAsNone<Address>,
-    pub last_tx: Anchor,
+    #[serde(rename = "last_tx")]
+    pub anchor: Anchor,
 }
 
 impl Tx {

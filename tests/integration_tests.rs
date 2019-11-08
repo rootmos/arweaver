@@ -79,7 +79,7 @@ fn tx_data_style() {
     assert_ne!(t.data.len(), 0);
     assert_eq!(t.quantity, Winstons::from(0u32));
     assert_eq!(t.reward, r);
-    assert_eq!(t.last_tx, a);
+    assert_eq!(t.anchor, a);
     assert!(t.target().is_none());
 }
 
