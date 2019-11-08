@@ -15,11 +15,12 @@ pub fn block_with_transactions() -> (BlockHash, DateTime<Utc>)  {
     (bh, ts)
 }
 
-pub fn data_transaction() -> (TxHash, Winstons, Anchor) {
+pub fn data_transaction() -> (TxHash, Winstons, Anchor, Tags) {
     let h = TxHash::decode("et36AGA5eo4HzVNi39nSvTbltzhoRPq643MzzwrH38w").unwrap();
     let r = Winstons::from(42360199u64);
     let a = Anchor::Block(BlockHash::decode("2serU-303rThvozelaLz67ftihCw7cJPAEF40SkPkfyvz92Z5gCKVfhadoVU3ZRg").unwrap());
-    (h, r, a)
+    let ts = Tags::from(vec![("Content-Type", "text/html"), ("User-Agent", "ArweaveDeploy/1.7.0")]);
+    (h, r, a, ts)
 }
 
 pub fn transfer_transaction() -> (TxHash, Winstons, Winstons, Anchor, Address, Address) {

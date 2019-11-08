@@ -73,7 +73,7 @@ fn txs() {
 #[test]
 fn tx_data_style() {
     let c = Client::new().unwrap();
-    let (txh, r, a) = settings::data_transaction();
+    let (txh, r, a, ts) = settings::data_transaction();
     let t = c.tx(&txh).unwrap();
     assert_eq!(t.id, txh);
     assert_ne!(t.data.len(), 0);
@@ -81,6 +81,7 @@ fn tx_data_style() {
     assert_eq!(t.reward, r);
     assert_eq!(t.anchor, a);
     assert!(t.target().is_none());
+    assert_eq!(t.tags, ts);
 }
 
 #[test]
@@ -95,4 +96,5 @@ fn tx_transfer_style() {
     assert_eq!(t.anchor, a);
     assert_eq!(t.owner.address().unwrap(), from);
     assert_eq!(Some(&to), t.target());
+    assert_eq!(t.tags, Tags::new());
 }

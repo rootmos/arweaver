@@ -15,11 +15,10 @@ use serde::{Deserialize, Deserializer};
 use serde::de::{IntoDeserializer};
 
 #[derive(Debug, Clone, Copy)]
-pub struct EmptyStringAsNone<T>(Option<T>);
+struct EmptyStringAsNone<T>(Option<T>);
 
 impl<T> EmptyStringAsNone<T> {
-    pub fn as_option(self) -> Option<T> { self.0 }
-    pub fn as_option_ref(&self) -> Option<&T> { self.0.as_ref() }
+    fn as_option_ref(&self) -> Option<&T> { self.0.as_ref() }
 }
 
 impl<T> From<Option<T>> for EmptyStringAsNone<T> {
@@ -59,7 +58,7 @@ where
 }
 
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Hash, PartialEq, Eq, Clone)]
 struct Bytes {
     bytes: Vec<u8>,
     thing: &'static str,
@@ -91,9 +90,25 @@ impl Bytes {
     }
 }
 
+fn is_human_readable(s: &String) -> bool {
+    s.chars().all(|c| {
+        c.is_alphanumeric() || c.is_ascii_punctuation() || c.is_ascii_whitespace()
+    })
+}
+
+
 impl fmt::Debug for Bytes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.encode())
+        match String::from_utf8(self.bytes.to_owned()) {
+            Ok(s) => {
+                if is_human_readable(&s) {
+                    write!(f, "{}", s)
+                } else {
+                    write!(f, "{}", self.encode())
+                }
+            },
+            _ => write!(f, "{}", self.encode())
+        }
     }
 }
 
@@ -397,6 +412,63 @@ impl<'de> Deserialize<'de> for Owner {
 }
 
 
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+pub struct Name(Bytes);
+
+impl<'de> Deserialize<'de> for Name {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        d.deserialize_str(BytesVisitor::new("tag name")).map(Self)
+    }
+}
+
+impl From<&str> for Name {
+    fn from(s: &str) -> Name { Name(Bytes { thing: "tag name", bytes: Vec::from(s) }) }
+}
+
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Value(Bytes);
+
+impl<'de> Deserialize<'de> for Value {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        d.deserialize_str(BytesVisitor::new("tag value")).map(Self)
+    }
+}
+
+impl From<&str> for Value {
+    fn from(s: &str) -> Value { Value(Bytes { thing: "tag value", bytes: Vec::from(s) }) }
+}
+
+
+#[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
+pub struct Tag { name: Name, value: Value }
+
+impl From<(Name, Value)> for Tag {
+    fn from(kv: (Name, Value)) -> Tag { Tag { name: kv.0, value: kv.1 } }
+}
+
+impl From<(&str, &str)> for Tag {
+    fn from(kv: (&str, &str)) -> Tag { Tag { name: Name::from(kv.0), value: Value::from(kv.1) } }
+}
+
+
+#[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
+pub struct Tags(Vec<Tag>);
+
+impl Tags {
+    pub fn new() -> Tags { Tags(vec![]) }
+}
+
+impl From<Vec<Tag>> for Tags {
+    fn from(ts: Vec<Tag>) -> Tags { Tags(ts) }
+}
+
+impl From<Vec<(&str, &str)>> for Tags {
+    fn from(ts: Vec<(&str, &str)>) -> Tags {
+        Tags(ts.iter().cloned().map(Tag::from).collect())
+    }
+}
+
 #[derive(Deserialize, Debug)]
 pub struct Tx {
     pub id: TxHash,
@@ -407,6 +479,7 @@ pub struct Tx {
     #[serde(rename = "last_tx")]
     pub anchor: Anchor,
     pub owner: Owner,
+    pub tags: Tags,
 }
 
 impl Tx {
