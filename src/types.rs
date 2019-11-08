@@ -58,23 +58,86 @@ where
     }
 }
 
+
 #[derive(PartialEq, Eq, Clone)]
-pub struct BlockHash(Vec<u8>);
+struct Bytes {
+    bytes: Vec<u8>,
+    thing: &'static str,
+}
+
+impl Bytes {
+    #[inline] fn len(&self) -> usize { self.bytes.len() }
+    #[inline] fn as_slice(&self) -> &[u8] { self.bytes.as_slice() }
+
+    fn encode(&self) -> String {
+        base64::encode_config(self.as_slice(), base64::URL_SAFE_NO_PAD)
+    }
+
+    fn decode<T: AsRef<[u8]>>(thing: &'static str, t: T) -> Result<Bytes, Error> {
+        base64::decode_config(&t, base64::URL_SAFE_NO_PAD)
+            .map(|bytes| Bytes { thing, bytes }).map_err(|_| {
+                Error::invalid_value(thing, "invalid format (base64 URL-safe w/o padding)")
+            })
+    }
+
+    fn with_expected_length(self, l: usize) -> Result<Bytes, Error> {
+        if self.bytes.len() != l {
+            Err(Error::invalid_value(
+                    self.thing,
+                    &format!("invalid length (is {}, should be {})", self.bytes.len(), l)))
+        } else {
+            Ok(self)
+        }
+    }
+}
+
+impl fmt::Debug for Bytes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.encode())
+    }
+}
+
+struct BytesVisitor {
+    thing: &'static str,
+    expected_length: Option<usize>,
+}
+
+impl BytesVisitor {
+    fn new(thing: &'static str) -> BytesVisitor {
+        BytesVisitor { thing, expected_length: None }
+    }
+
+    fn new_with_expected_length(thing: &'static str, expected_length: usize) -> BytesVisitor {
+        BytesVisitor { thing, expected_length: Some(expected_length) }
+    }
+}
+
+impl<'de> de::Visitor<'de> for BytesVisitor {
+    type Value = Bytes;
+    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(self.thing)
+    }
+
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+        let mut r = Bytes::decode(self.thing, v);
+        if let Some(l) = self.expected_length {
+            r = r.and_then(|bs| bs.with_expected_length(l))
+        }
+        r.map_err(de::Error::custom)
+    }
+}
+
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct BlockHash(Bytes);
 
 impl BlockHash {
     pub fn encode(&self) -> String {
-        base64::encode_config(&self.0, base64::URL_SAFE_NO_PAD)
+        self.0.encode()
     }
 
     pub fn decode<T: AsRef<[u8]>>(t: T) -> Result<Self, Error> {
-        let mut bh = BlockHash(vec![0; 48]);
-        match base64::decode_config_slice(&t, base64::URL_SAFE_NO_PAD, &mut bh.0) {
-            Ok(48) => Ok(bh),
-            Ok(_) => Err(Error::invalid_value(
-                    "block hash", "invalid length (should be 48 bytes)")),
-            Err(_) => Err(Error::invalid_value(
-                    "block hash", "invalid format (should be base64 URL-safe without padding)")),
-        }
+        Bytes::decode("block hash", t).and_then(|bs| bs.with_expected_length(48)).map(Self)
     }
 }
 
@@ -84,31 +147,13 @@ impl fmt::Display for BlockHash {
     }
 }
 
-impl fmt::Debug for BlockHash {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "BlockHash({})", self.encode())
-    }
-}
-
 impl AsRef<BlockHash> for BlockHash {
     #[inline] fn as_ref(&self) -> &Self { self }
 }
 
 impl<'de> Deserialize<'de> for BlockHash {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct BlockHashVisitor;
-        impl<'de> de::Visitor<'de> for BlockHashVisitor {
-            type Value = BlockHash;
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("block hash")
-            }
-
-            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-                BlockHash::decode(v).map_err(|e| de::Error::custom(e))
-            }
-        }
-
-        deserializer.deserialize_str(BlockHashVisitor)
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        d.deserialize_str(BytesVisitor::new_with_expected_length("block hash", 48)).map(Self)
     }
 }
 
@@ -171,23 +216,17 @@ pub struct Info {
     pub current: BlockHash,
 }
 
-#[derive(PartialEq, Eq, Clone)]
-pub struct TxHash(Vec<u8>);
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct TxHash(Bytes);
 
 impl TxHash {
     pub fn encode(&self) -> String {
-        base64::encode_config(&self.0, base64::URL_SAFE_NO_PAD)
+        self.0.encode()
     }
 
     pub fn decode<T: AsRef<[u8]>>(t: T) -> Result<Self, Error> {
-        let mut bh = TxHash(vec![0; 32]);
-        match base64::decode_config_slice(&t, base64::URL_SAFE_NO_PAD, &mut bh.0) {
-            Ok(32) => Ok(bh),
-            Ok(_) => Err(Error::invalid_value(
-                    "transaction hash", "invalid length (should be 32 bytes)")),
-            Err(_) => Err(Error::invalid_value(
-                    "transaction hash", "invalid format (should be base64 URL-safe without padding)")),
-        }
+        Bytes::decode("transaction hash", t).and_then(|bs| bs.with_expected_length(32)).map(Self)
     }
 }
 
@@ -197,66 +236,38 @@ impl fmt::Display for TxHash {
     }
 }
 
-impl fmt::Debug for TxHash {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TxHash({})", self.encode())
-    }
-}
-
 impl AsRef<TxHash> for TxHash {
     #[inline] fn as_ref(&self) -> &Self { self }
 }
 
 impl<'de> Deserialize<'de> for TxHash {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct TxHashVisitor;
-        impl<'de> de::Visitor<'de> for TxHashVisitor {
-            type Value = TxHash;
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("transaction hash")
-            }
-
-            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-                TxHash::decode(v).map_err(|e| de::Error::custom(e))
-            }
-        }
-
-        deserializer.deserialize_str(TxHashVisitor)
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        d.deserialize_str(BytesVisitor::new_with_expected_length("transaction hash", 32)).map(Self)
     }
 }
 
 
-#[derive(Debug)]
-pub struct Data(Vec<u8>);
+#[derive(Debug, PartialEq, Eq)]
+pub struct Data(Bytes);
 
 impl Data {
     pub fn len(&self) -> usize { self.0.len() }
 
     pub fn decode<T: AsRef<[u8]>>(t: T) -> Result<Self, Error> {
-        base64::decode_config(&t, base64::URL_SAFE_NO_PAD).map(Self).map_err(|_| {
-            Error::invalid_value("block hash",
-                                 "invalid format (should be base64 URL-safe without padding)")
-        })
+        Bytes::decode("data", t).map(Self)
     }
+}
+
+impl From<Vec<u8>> for Data {
+    fn from(bytes: Vec<u8>) -> Data { Data(Bytes { thing: "data", bytes }) }
 }
 
 impl<'de> Deserialize<'de> for Data {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct DataVisitor;
-        impl<'de> de::Visitor<'de> for DataVisitor {
-            type Value = Data;
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("data")
-            }
-
-            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-                Data::decode(v).map_err(|e| de::Error::custom(e))
-            }
-        }
-
-        deserializer.deserialize_str(DataVisitor)
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        d.deserialize_str(BytesVisitor::new("data")).map(Self)
     }
 }
+
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Winstons(BigUint);
@@ -297,23 +308,16 @@ impl<'de> Deserialize<'de> for Winstons {
 }
 
 
-#[derive(PartialEq, Eq, Clone)]
-pub struct Address(Vec<u8>);
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Address(Bytes);
 
 impl Address {
     pub fn encode(&self) -> String {
-        base64::encode_config(&self.0, base64::URL_SAFE_NO_PAD)
+        self.0.encode()
     }
 
     pub fn decode<T: AsRef<[u8]>>(t: T) -> Result<Self, Error> {
-        let mut a = Address(vec![0; 32]);
-        match base64::decode_config_slice(&t, base64::URL_SAFE_NO_PAD, &mut a.0) {
-            Ok(32) => Ok(a),
-            Ok(_) => Err(Error::invalid_value(
-                    "address", "invalid length (should be 32 bytes)")),
-            Err(_) => Err(Error::invalid_value(
-                    "address", "invalid format (should be base64 URL-safe without padding)")),
-        }
+        Bytes::decode("address", t).and_then(|bs| bs.with_expected_length(32)).map(Self)
     }
 }
 
@@ -323,31 +327,13 @@ impl fmt::Display for Address {
     }
 }
 
-impl fmt::Debug for Address {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Address({})", self.encode())
-    }
-}
-
 impl AsRef<Address> for Address {
     #[inline] fn as_ref(&self) -> &Self { self }
 }
 
 impl<'de> Deserialize<'de> for Address {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct AddressVisitor;
-        impl<'de> de::Visitor<'de> for AddressVisitor {
-            type Value = Address;
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("address")
-            }
-
-            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-                Address::decode(v).map_err(|e| de::Error::custom(e))
-            }
-        }
-
-        deserializer.deserialize_str(AddressVisitor)
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        d.deserialize_str(BytesVisitor::new_with_expected_length("address", 32)).map(Self)
     }
 }
 
@@ -391,7 +377,7 @@ pub struct Owner { n: BigNum }
 impl Owner {
     pub fn address(&self) -> Result<Address, Error> {
         hash(MessageDigest::sha256(), &self.n.to_vec()).map_err(Error::from)
-            .map(|bs| Address(bs.to_vec()))
+            .map(|bs| Address(Bytes { thing: "address", bytes: bs.to_vec() }))
     }
 
     pub fn pubkey(&self) -> Result<Rsa<Public>, Error> {
@@ -401,27 +387,12 @@ impl Owner {
 }
 
 impl<'de> Deserialize<'de> for Owner {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct OwnerVisitor;
-        impl<'de> de::Visitor<'de> for OwnerVisitor {
-            type Value = Owner;
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                f.write_str("owner")
-            }
-
-            fn visit_str<E: de::Error>(self, s: &str) -> Result<Self::Value, E> {
-                base64::decode_config(s, base64::URL_SAFE_NO_PAD)
-                    .map_err(|_| {
-                        Error::invalid_value("owner",
-                            "expected big-endian bytes base64 encoded (URL-safe w/o padding)")
-                    })
-                    .and_then(|bs| BigNum::from_slice(&bs).map_err(Error::from))
-                    .map(|n| Owner { n })
-                    .map_err(|e| de::Error::custom(e))
-            }
-        }
-
-        deserializer.deserialize_str(OwnerVisitor)
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        d.deserialize_str(BytesVisitor::new("owner"))
+            .and_then(|bs| {
+                BigNum::from_slice(bs.as_slice()).map_err(Error::from).map_err(de::Error::custom)
+            })
+            .map(|n| Owner { n })
     }
 }
 
