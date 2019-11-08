@@ -8,8 +8,8 @@ use chrono::{DateTime, Utc};
 use num_bigint::BigUint;
 use openssl::bn::BigNum;
 use openssl::hash::{MessageDigest, hash};
-use openssl::rsa::Rsa;
-use openssl::pkey::Public;
+use openssl::rsa::{Rsa, Padding};
+use openssl::pkey::{PKey, PKeyRef, Public};
 use serde::de;
 use serde::{Deserialize, Deserializer};
 use serde::de::{IntoDeserializer};
@@ -43,7 +43,7 @@ where
         if s.len() == 0 {
             Ok(EmptyStringAsNone(None))
         } else {
-            T::deserialize(s.into_deserializer()).map(|t| EmptyStringAsNone(Some(t)))
+            T::deserialize(s.into_deserializer()).map(Some).map(EmptyStringAsNone)
         }
     }
 }
@@ -96,20 +96,19 @@ fn is_human_readable(s: &String) -> bool {
     })
 }
 
-
 impl fmt::Debug for Bytes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match String::from_utf8(self.bytes.to_owned()) {
-            Ok(s) => {
-                if is_human_readable(&s) {
-                    write!(f, "{}", s)
-                } else {
-                    write!(f, "{}", self.encode())
-                }
-            },
-            _ => write!(f, "{}", self.encode())
+            Ok(ref s) if is_human_readable(&s) => write!(f, "{}", s),
+            _ => write!(f, "{}", self.encode()),
         }
     }
+}
+
+impl<'a> IntoIterator for &'a Bytes {
+    type Item = &'a u8;
+    type IntoIter = std::slice::Iter<'a, u8>;
+    fn into_iter(self) -> std::slice::Iter<'a, u8> { self.bytes.iter() }
 }
 
 struct BytesVisitor {
@@ -314,7 +313,7 @@ impl<'de> Deserialize<'de> for Winstons {
             }
 
             fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-                Winstons::decode(v).map_err(|e| de::Error::custom(e))
+                Winstons::decode(v).map_err(de::Error::custom)
             }
         }
 
@@ -397,7 +396,7 @@ impl Owner {
 
     pub fn pubkey(&self) -> Result<Rsa<Public>, Error> {
         // https://github.com/ArweaveTeam/arweave/blob/aef590a2e7fbc2703d47449c121058a77916ce16/src/ar_wallet.erl#L15
-        Ok(Rsa::from_public_components(self.n.to_owned()?, BigNum::from_u32(65537u32)?)?)
+        Ok(Rsa::from_public_components(self.n.to_owned()?, BigNum::from_u32(65537)?)?)
     }
 }
 
@@ -410,7 +409,6 @@ impl<'de> Deserialize<'de> for Owner {
             .map(|n| Owner { n })
     }
 }
-
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub struct Name(Bytes);
@@ -469,6 +467,20 @@ impl From<Vec<(&str, &str)>> for Tags {
     }
 }
 
+#[derive(Debug)]
+pub struct Signature(Bytes);
+
+impl AsRef<Signature> for Signature {
+    #[inline] fn as_ref(&self) -> &Self { self }
+}
+
+impl<'de> Deserialize<'de> for Signature {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        d.deserialize_str(BytesVisitor::new("signature")).map(Self)
+    }
+}
+
+
 #[derive(Deserialize, Debug)]
 pub struct Tx {
     pub id: TxHash,
@@ -480,10 +492,72 @@ pub struct Tx {
     pub anchor: Anchor,
     pub owner: Owner,
     pub tags: Tags,
+    pub signature: Signature,
 }
+
+
+trait Sponge {
+    fn absorb<T: AsRef<[u8]>>(&mut self, t: T) -> Result<(), Error>;
+}
+
+struct Verifier<'a> { v: openssl::sign::Verifier<'a> }
+
+impl<'a> Verifier<'a> {
+    fn new(pk: &'a PKeyRef<Public>) -> Result<Verifier<'a>, Error> {
+        let mut v = openssl::sign::Verifier::new_without_digest(pk)?;
+        v.set_rsa_padding(Padding::PKCS1_PSS)?;
+        Ok(Verifier { v })
+    }
+
+    fn verify<S: AsRef<Signature>>(self, sig: S) -> Result<bool, Error> {
+        Ok(self.v.verify(sig.as_ref().0.as_slice())?)
+    }
+}
+
+impl Sponge for Verifier<'_> {
+    fn absorb<T: AsRef<[u8]>>(&mut self, t: T) -> Result<(), Error> {
+        self.v.update(t.as_ref()).map_err(Error::from)
+    }
+}
+
 
 impl Tx {
     pub fn target(&self) -> Option<&Address> {
         self.target.as_option_ref()
+    }
+
+    fn signature_data<S: Sponge>(&self, mut s: S) -> Result<S, Error>
+    {
+        // https://github.com/ArweaveTeam/arweave/blob/d882d8a5880b765cd9a65928eaf7c04ea6aedfea/src/ar_tx.erl#L54
+        s.absorb(&self.owner.n.to_vec())?;
+
+        if let Some(Address(a)) = self.target() {
+            s.absorb(a.as_slice())?
+        }
+
+        s.absorb(self.data.0.as_slice())?;
+
+        s.absorb(&self.quantity.0.to_str_radix(10).into_bytes())?;
+        s.absorb(&self.reward.0.to_str_radix(10).into_bytes())?;
+
+        match &self.anchor {
+            Anchor::Block(BlockHash(bh)) => s.absorb(bh.as_slice())?,
+            Anchor::Transaction(Some(TxHash(txh))) => s.absorb(txh.as_slice())?,
+            Anchor::Transaction(None) => (),
+        }
+
+        for t in self.tags.0.iter() {
+            s.absorb(t.name.0.as_slice())?;
+            s.absorb(t.value.0.as_slice())?;
+        }
+
+        Ok(s)
+    }
+
+    pub fn verify(&self) -> Result<bool, Error> {
+        let pk = PKey::from_rsa(self.owner.pubkey()?)?;
+        let v = Verifier::new(&pk)?;
+        let v = self.signature_data(v)?;
+        v.verify(&self.signature)
     }
 }

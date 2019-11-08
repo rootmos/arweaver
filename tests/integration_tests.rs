@@ -67,6 +67,7 @@ fn txs() {
     for txh in b.txs {
         let tx = c.tx(&txh).unwrap();
         assert_eq!(txh, tx.id);
+        assert!(tx.verify().unwrap());
     }
 }
 
@@ -82,6 +83,7 @@ fn tx_data_style() {
     assert_eq!(t.anchor, a);
     assert!(t.target().is_none());
     assert_eq!(t.tags, ts);
+    assert!(t.verify().unwrap());
 }
 
 #[test]
@@ -97,4 +99,5 @@ fn tx_transfer_style() {
     assert_eq!(t.owner.address().unwrap(), from);
     assert_eq!(Some(&to), t.target());
     assert_eq!(t.tags, Tags::new());
+    assert!(t.verify().unwrap());
 }
