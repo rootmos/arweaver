@@ -3,9 +3,16 @@ language: rust
 services:
   - docker
 
+rust:
+  - stable
+  - beta
+
 before_install:
   - make start-loom
   - make wait
+
+install:
+  - make build
 
 script:
   - make test

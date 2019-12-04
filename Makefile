@@ -15,6 +15,10 @@ mutability-tests:
 		LOOM_TARGET=http://localhost:$(LOOM_PORT)/loom/ \
 		$(CARGO) test --test mutability_tests
 
+.PHONY: build
+build:
+	$(CARGO) build
+
 .PHONY: start-loom
 start-loom:
 	$(DOCKER) run --detach --rm --publish=$(LOOM_PORT):8000 --name=loom \
