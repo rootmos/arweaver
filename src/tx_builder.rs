@@ -43,40 +43,43 @@ impl TxBuilder {
         }
     }
 
-    pub fn target(mut self, target: Address) -> Self {
-        self.target = Some(target); self
+    pub fn target(self, target: Address) -> Self {
+        TxBuilder { target: Some(target), ..self }
     }
 
-    pub fn data(mut self, data: Data) -> Self {
-        self.data = data; self
+    pub fn data(self, data: Data) -> Self {
+        TxBuilder { data, ..self }
     }
 
-    pub fn quantity(mut self, quantity: Winstons) -> Self {
-        self.quantity = quantity; self
+    pub fn quantity(self, quantity: Winstons) -> Self {
+        TxBuilder { quantity, ..self }
     }
 
-    pub fn reward(mut self, client: &Client) -> Result<Self, Error> {
-        self.reward = Some(client.price(self.target.as_ref(), self.data.len())?);
-        Ok(self)
+    pub fn reward(self, client: &Client) -> Result<Self, Error> {
+        let reward = Some(client.price(self.target.as_ref(), self.data.len())?);
+        Ok(TxBuilder { reward, ..self })
     }
 
-    pub fn sign<W: AsRef<Wallet>>(mut self, wallet: W) -> Result<Tx, Error> {
-        self.owner = Some(wallet.as_ref().owner().clone()?);
+    pub fn sign<W: AsRef<Wallet>>(self, wallet: W) -> Result<Tx, Error> {
+        let txb = TxBuilder {
+            owner: Some(wallet.as_ref().owner().clone()?),
+            ..self
+        };
         let mut s = Signer::new(wallet.as_ref().key())?;
-        self.squeeze(&mut s)?;
+        txb.squeeze(&mut s)?;
         let signature = Signature::new(s.sign()?)?;
         let id = signature.to_transaction_hash()?;
-        let reward = self.reward.ok_or(Error::value_not_present("reward", "request builder"))?;
+        let reward = txb.reward.ok_or(Error::value_not_present("reward", "request builder"))?;
         Ok(Tx {
-            anchor: self.anchor,
-            data: self.data,
+            anchor: txb.anchor,
+            data: txb.data,
             signature,
             id,
             owner: wallet.as_ref().owner().clone()?,
-            quantity: self.quantity,
+            quantity: txb.quantity,
             reward: reward,
-            tags: self.tags,
-            target: EmptyStringAsNone::from(self.target),
+            tags: txb.tags,
+            target: EmptyStringAsNone::from(txb.target),
         })
     }
 }
