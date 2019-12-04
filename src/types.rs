@@ -6,12 +6,13 @@ use crate::error::Error;
 
 use chrono::{DateTime, Utc};
 use num_bigint::BigUint;
+use num_traits::cast::ToPrimitive;
 use openssl::bn::BigNum;
 use openssl::hash::{MessageDigest, hash};
 use openssl::rsa::{Rsa, Padding};
 use openssl::pkey::{PKey, PKeyRef, Public};
 use serde::de;
-use serde::{Deserialize, Deserializer};
+use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use serde::de::{IntoDeserializer};
 
 #[derive(Debug, Clone, Copy)]
@@ -307,6 +308,10 @@ impl<T> From<T> for Winstons where T: Into<BigUint> {
     #[inline] fn from(t: T) -> Self { Self(t.into()) }
 }
 
+impl AsRef<Winstons> for Winstons {
+    #[inline] fn as_ref(&self) -> &Self { self }
+}
+
 impl<'de> Deserialize<'de> for Winstons {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct WinstonsVisitor;
@@ -322,6 +327,12 @@ impl<'de> Deserialize<'de> for Winstons {
         }
 
         deserializer.deserialize_str(WinstonsVisitor)
+    }
+}
+
+impl Serialize for Winstons {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_u64(self.0.to_u64().unwrap())
     }
 }
 
@@ -360,6 +371,11 @@ impl<'de> Deserialize<'de> for Address {
     }
 }
 
+impl Serialize for Address {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&self.encode())
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Anchor {

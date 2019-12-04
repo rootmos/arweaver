@@ -1,9 +1,11 @@
 language: rust
-rust:
-  - stable
-  - beta
-  - nightly
-jobs:
-  allow_failures:
-    - rust: nightly
-      fast_finish: true
+
+services:
+  - docker
+
+before_install:
+  - make start-loom
+  - make wait
+
+script:
+  - make test
