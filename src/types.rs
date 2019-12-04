@@ -3,22 +3,33 @@ use std::convert::From;
 use std::marker::PhantomData;
 
 use crate::error::Error;
+use crate::sponge::{Sponge, Absorbable, Verifier};
 
 use chrono::{DateTime, Utc};
 use num_bigint::BigUint;
+use num_traits::cast::ToPrimitive;
 use openssl::bn::BigNum;
 use openssl::hash::{MessageDigest, hash};
-use openssl::rsa::{Rsa, Padding};
-use openssl::pkey::{PKey, PKeyRef, Public};
+use openssl::rsa::{Rsa};
+use openssl::pkey::{PKey, PKeyRef, Public, Private, HasPublic};
 use serde::de;
-use serde::{Deserialize, Deserializer};
+use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use serde::de::{IntoDeserializer};
 
 #[derive(Debug, Clone, Copy)]
-struct EmptyStringAsNone<T>(Option<T>);
+pub struct EmptyStringAsNone<T>(Option<T>);
 
 impl<T> EmptyStringAsNone<T> {
     fn as_option_ref(&self) -> Option<&T> { self.0.as_ref() }
+}
+
+impl<T: Serialize> Serialize for EmptyStringAsNone<T> {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self.as_option_ref() {
+            Some(t) => t.serialize(s),
+            None => s.serialize_str(""),
+        }
+    }
 }
 
 impl<T> From<Option<T>> for EmptyStringAsNone<T> {
@@ -145,8 +156,14 @@ impl<'de> de::Visitor<'de> for BytesVisitor {
     }
 }
 
+impl Serialize for Bytes {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&self.encode())
+    }
+}
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct BlockHash(Bytes);
 
 impl BlockHash {
@@ -167,6 +184,12 @@ impl fmt::Display for BlockHash {
 
 impl AsRef<BlockHash> for BlockHash {
     #[inline] fn as_ref(&self) -> &Self { self }
+}
+
+impl Absorbable for BlockHash {
+    fn squeeze<S: Sponge>(&self, s: &mut S) -> Result<(), Error> {
+        s.absorb(&self.0.as_slice())
+    }
 }
 
 impl<'de> Deserialize<'de> for BlockHash {
@@ -235,7 +258,7 @@ pub struct Info {
 }
 
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct TxHash(Bytes);
 
 impl TxHash {
@@ -258,6 +281,12 @@ impl AsRef<TxHash> for TxHash {
     #[inline] fn as_ref(&self) -> &Self { self }
 }
 
+impl Absorbable for TxHash {
+    fn squeeze<S: Sponge>(&self, s: &mut S) -> Result<(), Error> {
+        s.absorb(&self.0.as_slice())
+    }
+}
+
 impl<'de> Deserialize<'de> for TxHash {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         d.deserialize_str(BytesVisitor::new_with_expected_length("transaction hash", 32)).map(Self)
@@ -265,7 +294,7 @@ impl<'de> Deserialize<'de> for TxHash {
 }
 
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct Data(Bytes);
 
 impl Data {
@@ -274,6 +303,10 @@ impl Data {
     pub fn decode<T: AsRef<[u8]>>(t: T) -> Result<Self, Error> {
         Bytes::decode("data", t).map(Self)
     }
+}
+
+impl AsRef<Data> for Data {
+    #[inline] fn as_ref(&self) -> &Self { self }
 }
 
 impl From<Vec<u8>> for Data {
@@ -286,8 +319,14 @@ impl<'de> Deserialize<'de> for Data {
     }
 }
 
+impl Absorbable for Data {
+    fn squeeze<S: Sponge>(&self, s: &mut S) -> Result<(), Error> {
+        s.absorb(&self.0.as_slice())
+    }
+}
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct Winstons(BigUint);
 
 impl Winstons {
@@ -303,12 +342,33 @@ impl fmt::Display for Winstons {
     }
 }
 
+impl std::ops::Add for Winstons {
+    type Output = Winstons;
+    fn add(self, other: Self) -> Self { Self(self.0 + other.0) }
+}
+
+impl std::ops::Add for &Winstons {
+    type Output = Winstons;
+    fn add(self, other: Self) -> Winstons { Winstons(self.0.to_owned() + other.0.to_owned()) }
+}
+
 impl<T> From<T> for Winstons where T: Into<BigUint> {
     #[inline] fn from(t: T) -> Self { Self(t.into()) }
 }
 
-impl<'de> Deserialize<'de> for Winstons {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+impl AsRef<Winstons> for Winstons {
+    #[inline] fn as_ref(&self) -> &Self { self }
+}
+
+impl Absorbable for Winstons {
+    fn squeeze<S: Sponge>(&self, s: &mut S) -> Result<(), Error> {
+        s.absorb(&self.0.to_str_radix(10).into_bytes())
+    }
+}
+
+pub mod winstons_as_strings {
+    use super::*;
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Winstons, D::Error> {
         struct WinstonsVisitor;
         impl<'de> de::Visitor<'de> for WinstonsVisitor {
             type Value = Winstons;
@@ -323,10 +383,25 @@ impl<'de> Deserialize<'de> for Winstons {
 
         deserializer.deserialize_str(WinstonsVisitor)
     }
+
+    pub fn serialize<S: Serializer>(w: &Winstons, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&w.0.to_str_radix(10))
+    }
 }
 
+pub mod winstons_as_numbers {
+    use super::*;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+    pub fn deserialize<'de, D: Deserializer<'de>>(_deserializer: D) -> Result<Winstons, D::Error> {
+        unimplemented!()
+    }
+
+    pub fn serialize<S: Serializer>(w: &Winstons, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_u64(w.0.to_u64().unwrap())
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct Address(Bytes);
 
 impl Address {
@@ -354,17 +429,32 @@ impl AsRef<Address> for Address {
     #[inline] fn as_ref(&self) -> &Self { self }
 }
 
+impl Absorbable for Address {
+    fn squeeze<S: Sponge>(&self, s: &mut S) -> Result<(), Error> {
+        s.absorb(&self.0.as_slice())
+    }
+}
+
 impl<'de> Deserialize<'de> for Address {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         d.deserialize_str(BytesVisitor::new_with_expected_length("address", 32)).map(Self)
     }
 }
 
-
 #[derive(Debug, PartialEq, Eq)]
 pub enum Anchor {
     Block(BlockHash),
     Transaction(Option<TxHash>),
+}
+
+impl Absorbable for Anchor {
+    fn squeeze<S: Sponge>(&self, s: &mut S) -> Result<(), Error> {
+        match &self {
+            Anchor::Block(bh) => bh.squeeze(s),
+            Anchor::Transaction(Some(txh)) => txh.squeeze(s),
+            Anchor::Transaction(None) => Ok(()),
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for Anchor {
@@ -393,6 +483,16 @@ impl<'de> Deserialize<'de> for Anchor {
     }
 }
 
+impl Serialize for Anchor {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Anchor::Transaction(Some(txh)) => txh.serialize(s),
+            Anchor::Transaction(None) => s.serialize_str(""),
+            Anchor::Block(bh) => bh.serialize(s),
+        }
+    }
+}
+
 
 #[derive(Debug)]
 pub struct Owner { n: BigNum }
@@ -407,6 +507,23 @@ impl Owner {
         // https://github.com/ArweaveTeam/arweave/blob/aef590a2e7fbc2703d47449c121058a77916ce16/src/ar_wallet.erl#L15
         Ok(Rsa::from_public_components(self.n.to_owned()?, BigNum::from_u32(65537)?)?)
     }
+
+    pub fn exponent() -> BigNum {
+        BigNum::from_u32(65537).unwrap()
+    }
+
+    pub fn from<K: HasPublic>(t: &PKeyRef<K>) -> Result<Self, Error> {
+        let t = t.rsa()?;
+        if t.e().to_owned()? != Self::exponent() {
+            Err(Error::invalid_value("RSA key", "incorrect public exponent"))
+        } else {
+            Ok(Owner { n: t.n().to_owned()? })
+        }
+    }
+
+    pub fn clone(&self) -> Result<Self, Error> {
+        Ok(Owner { n: self.n.to_owned()? })
+    }
 }
 
 impl<'de> Deserialize<'de> for Owner {
@@ -419,7 +536,22 @@ impl<'de> Deserialize<'de> for Owner {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+impl Absorbable for Owner {
+    fn squeeze<S: Sponge>(&self, s: &mut S) -> Result<(), Error> {
+        s.absorb(&self.n.to_vec())
+    }
+}
+
+impl Serialize for Owner {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let bs = self.n.to_vec();
+        let enc = base64::encode_config(&bs, base64::URL_SAFE_NO_PAD);
+        s.serialize_str(&enc)
+    }
+}
+
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Serialize)]
 pub struct Name(Bytes);
 
 impl<'de> Deserialize<'de> for Name {
@@ -433,7 +565,7 @@ impl From<&str> for Name {
 }
 
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct Value(Bytes);
 
 impl<'de> Deserialize<'de> for Value {
@@ -447,7 +579,7 @@ impl From<&str> for Value {
 }
 
 
-#[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone)]
 pub struct Tag { name: Name, value: Value }
 
 impl From<(Name, Value)> for Tag {
@@ -459,7 +591,7 @@ impl From<(&str, &str)> for Tag {
 }
 
 
-#[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone)]
 pub struct Tags(Vec<Tag>);
 
 impl Tags {
@@ -476,8 +608,30 @@ impl From<Vec<(&str, &str)>> for Tags {
     }
 }
 
-#[derive(Debug)]
+impl Absorbable for Tags {
+    fn squeeze<S: Sponge>(&self, s: &mut S) -> Result<(), Error> {
+        for t in self.0.iter() {
+            s.absorb(t.name.0.as_slice())?;
+            s.absorb(t.value.0.as_slice())?;
+        }
+        Ok(())
+    }
+}
+
+
+#[derive(Debug, Serialize)]
 pub struct Signature(Bytes);
+
+impl Signature {
+    pub fn new<T: AsRef<[u8]>>(t: T) -> Result<Self, Error> {
+        Ok(Signature(Bytes::new("signature", t)))
+    }
+
+    pub fn to_transaction_hash(&self) -> Result<TxHash, Error> {
+        hash(MessageDigest::sha256(), &self.0.as_slice()).map_err(Error::from)
+            .map(|bs| TxHash(Bytes { thing: "transaction hash", bytes: bs.to_vec() }))
+    }
+}
 
 impl AsRef<Signature> for Signature {
     #[inline] fn as_ref(&self) -> &Self { self }
@@ -489,14 +643,15 @@ impl<'de> Deserialize<'de> for Signature {
     }
 }
 
-
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct Tx {
     pub id: TxHash,
     pub data: Data,
+    #[serde(with = "winstons_as_strings")]
     pub quantity: Winstons,
+    #[serde(with = "winstons_as_strings")]
     pub reward: Winstons,
-    target: EmptyStringAsNone<Address>,
+    pub target: EmptyStringAsNone<Address>,
     #[serde(rename = "last_tx")]
     pub anchor: Anchor,
     pub owner: Owner,
@@ -504,69 +659,52 @@ pub struct Tx {
     pub signature: Signature,
 }
 
-
-trait Sponge {
-    fn absorb<T: AsRef<[u8]>>(&mut self, t: T) -> Result<(), Error>;
-}
-
-struct Verifier<'a> { v: openssl::sign::Verifier<'a> }
-
-impl<'a> Verifier<'a> {
-    fn new(pk: &'a PKeyRef<Public>) -> Result<Verifier<'a>, Error> {
-        let mut v = openssl::sign::Verifier::new_without_digest(pk)?;
-        v.set_rsa_padding(Padding::PKCS1_PSS)?;
-        Ok(Verifier { v })
-    }
-
-    fn verify<S: AsRef<Signature>>(self, sig: S) -> Result<bool, Error> {
-        Ok(self.v.verify(sig.as_ref().0.as_slice())?)
+impl Absorbable for Tx {
+    fn squeeze<S: Sponge>(&self, s: &mut S) -> Result<(), Error> {
+        // https://github.com/ArweaveTeam/arweave/blob/d882d8a5880b765cd9a65928eaf7c04ea6aedfea/src/ar_tx.erl#L54
+        self.owner.squeeze(s)?;
+        if let Some(a) = self.target() { a.squeeze(s)?; }
+        self.data.squeeze(s)?;
+        self.quantity.squeeze(s)?;
+        self.reward.squeeze(s)?;
+        self.anchor.squeeze(s)?;
+        self.tags.squeeze(s)?;
+        Ok(())
     }
 }
 
-impl Sponge for Verifier<'_> {
-    fn absorb<T: AsRef<[u8]>>(&mut self, t: T) -> Result<(), Error> {
-        self.v.update(t.as_ref()).map_err(Error::from)
-    }
+impl AsRef<Tx> for Tx {
+    #[inline] fn as_ref(&self) -> &Self { self }
 }
-
 
 impl Tx {
     pub fn target(&self) -> Option<&Address> {
         self.target.as_option_ref()
     }
 
-    fn signature_data<S: Sponge>(&self, mut s: S) -> Result<S, Error>
-    {
-        // https://github.com/ArweaveTeam/arweave/blob/d882d8a5880b765cd9a65928eaf7c04ea6aedfea/src/ar_tx.erl#L54
-        s.absorb(&self.owner.n.to_vec())?;
-
-        if let Some(Address(a)) = self.target() {
-            s.absorb(a.as_slice())?
-        }
-
-        s.absorb(self.data.0.as_slice())?;
-
-        s.absorb(&self.quantity.0.to_str_radix(10).into_bytes())?;
-        s.absorb(&self.reward.0.to_str_radix(10).into_bytes())?;
-
-        match &self.anchor {
-            Anchor::Block(BlockHash(bh)) => s.absorb(bh.as_slice())?,
-            Anchor::Transaction(Some(TxHash(txh))) => s.absorb(txh.as_slice())?,
-            Anchor::Transaction(None) => (),
-        }
-
-        for t in self.tags.0.iter() {
-            s.absorb(t.name.0.as_slice())?;
-            s.absorb(t.value.0.as_slice())?;
-        }
-
-        Ok(s)
-    }
-
     pub fn verify(&self) -> Result<bool, Error> {
         let pk = PKey::from_rsa(self.owner.pubkey()?)?;
-        let v = Verifier::new(&pk)?;
-        let v = self.signature_data(v)?;
-        v.verify(&self.signature)
+        let mut v = Verifier::new(&pk)?;
+        self.squeeze(&mut v)?;
+        v.verify(&self.signature.0.as_slice())
     }
+}
+
+pub struct Wallet { key: PKey<Private>, owner: Owner, address: Address  }
+
+impl Wallet {
+    pub fn address(&self) -> &Address { &self.address }
+    pub fn new() -> Result<Self, Error> {
+        let key = PKey::from_rsa(Rsa::generate_with_e(4096, &Owner::exponent())?)?;
+        let owner = Owner::from(&key)?;
+        let address = owner.address()?;
+        Ok(Wallet { key, owner, address })
+    }
+
+    pub fn owner(&self) -> &Owner { &self.owner }
+    pub fn key(&self) -> &PKeyRef<Private> { self.key.as_ref() }
+}
+
+impl AsRef<Wallet> for Wallet {
+    #[inline] fn as_ref(&self) -> &Self { self }
 }
