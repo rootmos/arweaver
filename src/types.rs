@@ -65,6 +65,10 @@ struct Bytes {
 }
 
 impl Bytes {
+    #[inline] fn new<T: AsRef<[u8]>>(thing: &'static str, t: T) -> Self {
+        Self { bytes: t.as_ref().to_owned(), thing }
+    }
+
     #[inline] fn len(&self) -> usize { self.bytes.len() }
     #[inline] fn as_slice(&self) -> &[u8] { self.bytes.as_slice() }
 
@@ -326,6 +330,11 @@ impl<'de> Deserialize<'de> for Winstons {
 pub struct Address(Bytes);
 
 impl Address {
+    pub fn new<T: AsRef<[u8]>>(t: T) -> Result<Self, Error> {
+        let bs = Bytes::new("address", t).with_expected_length(32)?;
+        Ok(Address(bs))
+    }
+
     pub fn encode(&self) -> String {
         self.0.encode()
     }

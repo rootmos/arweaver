@@ -33,4 +33,9 @@ impl Client {
     pub fn tx<T: AsRef<TxHash>>(&self, t: T) -> Result<Tx, Error> {
         Ok(reqwest::get(self.url.join("tx/")?.join(&t.as_ref().encode())?)?.json()?)
     }
+
+    pub fn balance<T: AsRef<Address>>(&self, t: T) -> Result<Winstons, Error> {
+        let url = self.url.join(&format!("wallet/{}/balance", t.as_ref().encode()))?;
+        Ok(Winstons::decode(reqwest::get(url)?.text()?)?)
+    }
 }

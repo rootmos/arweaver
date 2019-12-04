@@ -1,5 +1,6 @@
 use arweave::*;
 mod settings;
+mod fresh;
 
 #[test]
 fn info() {
@@ -100,4 +101,11 @@ fn tx_transfer_style() {
     assert_eq!(Some(&to), t.target());
     assert_eq!(t.tags, Tags::new());
     assert!(t.verify().unwrap());
+}
+
+#[test]
+fn balance() {
+    let c = Client::new().unwrap();
+    assert_eq!(c.balance(fresh::address()).unwrap(), Winstons::from(0u32));
+    assert_ne!(c.balance(settings::account_with_nonzero_balance()).unwrap(), Winstons::from(0u32));
 }

@@ -32,3 +32,7 @@ pub fn transfer_transaction() -> (TxHash, Winstons, Winstons, Anchor, Address, A
     let to = Address::decode("T22ykpEoUQerm0_8wSpiOE_2xUOGmG1lnf7niSiQlaU").unwrap();
     (h, r, q, a, from, to)
 }
+
+pub fn account_with_nonzero_balance() -> Address {
+    Address::decode("OesddStCpX7gW3ZWxO93GnU7wRYjAQIJUA8c7KkID2M").unwrap()
+}
