@@ -34,8 +34,22 @@ impl Client {
         Ok(reqwest::get(self.url.join("tx/")?.join(&t.as_ref().encode())?)?.json()?)
     }
 
+    pub fn submit<T: AsRef<Tx>>(&self, t: T) -> Result<(), Error> {
+        let client = reqwest::Client::new();
+        client.post(self.url.join("tx")?).json(t.as_ref()).send()?;
+        Ok(())
+    }
+
     pub fn balance<T: AsRef<Address>>(&self, t: T) -> Result<Winstons, Error> {
         let url = self.url.join(&format!("wallet/{}/balance", t.as_ref().encode()))?;
+        Ok(Winstons::decode(reqwest::get(url)?.text()?)?)
+    }
+
+    pub fn price<T: AsRef<Address>>(&self, t: Option<T>, size: usize) -> Result<Winstons, Error> {
+        let url = match t {
+            Some(target) => self.url.join(&format!("price/{}/{}", size, target.as_ref().encode()))?,
+            None => self.url.join(&format!("price/{}", size))?,
+        };
         Ok(Winstons::decode(reqwest::get(url)?.text()?)?)
     }
 }
