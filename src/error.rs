@@ -7,6 +7,7 @@ pub enum Error {
     UrlError(reqwest::UrlError),
     ReqwestError(reqwest::Error),
     OpensslError(openssl::error::ErrorStack),
+    VarError(std::env::VarError),
     InvalidValue { thing: String, msg: String },
 }
 
@@ -24,6 +25,7 @@ impl fmt::Display for Error {
             Error::UrlError(e) => write!(f, "url: {}", e),
             Error::OpensslError(e) => write!(f, "openssl: {}", e),
             Error::InvalidValue { thing, msg } => write!(f, "parsing {}: {}", thing, msg),
+            Error::VarError(e) => write!(f, "envvar: {}", e),
         }
     }
 }
@@ -42,4 +44,8 @@ impl From<reqwest::UrlError> for Error {
 
 impl From<openssl::error::ErrorStack> for Error {
     fn from(e: openssl::error::ErrorStack) -> Self { Error::OpensslError(e) }
+}
+
+impl From<std::env::VarError> for Error {
+    fn from(e: std::env::VarError) -> Self { Error::VarError(e) }
 }
