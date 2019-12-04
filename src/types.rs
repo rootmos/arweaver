@@ -23,6 +23,15 @@ impl<T> EmptyStringAsNone<T> {
     fn as_option_ref(&self) -> Option<&T> { self.0.as_ref() }
 }
 
+impl<T: Serialize> Serialize for EmptyStringAsNone<T> {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self.as_option_ref() {
+            Some(t) => t.serialize(s),
+            None => s.serialize_str(""),
+        }
+    }
+}
+
 impl<T> From<Option<T>> for EmptyStringAsNone<T> {
     fn from(ot: Option<T>) -> Self { Self(ot) }
 }
@@ -147,8 +156,14 @@ impl<'de> de::Visitor<'de> for BytesVisitor {
     }
 }
 
+impl Serialize for Bytes {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&self.encode())
+    }
+}
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct BlockHash(Bytes);
 
 impl BlockHash {
@@ -243,7 +258,7 @@ pub struct Info {
 }
 
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct TxHash(Bytes);
 
 impl TxHash {
@@ -279,7 +294,7 @@ impl<'de> Deserialize<'de> for TxHash {
 }
 
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct Data(Bytes);
 
 impl Data {
@@ -351,8 +366,9 @@ impl Absorbable for Winstons {
     }
 }
 
-impl<'de> Deserialize<'de> for Winstons {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+pub mod winstons_as_strings {
+    use super::*;
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Winstons, D::Error> {
         struct WinstonsVisitor;
         impl<'de> de::Visitor<'de> for WinstonsVisitor {
             type Value = Winstons;
@@ -367,16 +383,25 @@ impl<'de> Deserialize<'de> for Winstons {
 
         deserializer.deserialize_str(WinstonsVisitor)
     }
-}
 
-impl Serialize for Winstons {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_u64(self.0.to_u64().unwrap())
+    pub fn serialize<S: Serializer>(w: &Winstons, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&w.0.to_str_radix(10))
     }
 }
 
+pub mod winstons_as_numbers {
+    use super::*;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+    pub fn deserialize<'de, D: Deserializer<'de>>(_deserializer: D) -> Result<Winstons, D::Error> {
+        unimplemented!()
+    }
+
+    pub fn serialize<S: Serializer>(w: &Winstons, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_u64(w.0.to_u64().unwrap())
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct Address(Bytes);
 
 impl Address {
@@ -413,12 +438,6 @@ impl Absorbable for Address {
 impl<'de> Deserialize<'de> for Address {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         d.deserialize_str(BytesVisitor::new_with_expected_length("address", 32)).map(Self)
-    }
-}
-
-impl Serialize for Address {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_str(&self.encode())
     }
 }
 
@@ -461,6 +480,16 @@ impl<'de> Deserialize<'de> for Anchor {
         }
 
         deserializer.deserialize_str(AnchorVisitor)
+    }
+}
+
+impl Serialize for Anchor {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Anchor::Transaction(Some(txh)) => txh.serialize(s),
+            Anchor::Transaction(None) => s.serialize_str(""),
+            Anchor::Block(bh) => bh.serialize(s),
+        }
     }
 }
 
@@ -513,7 +542,16 @@ impl Absorbable for Owner {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+impl Serialize for Owner {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let bs = self.n.to_vec();
+        let enc = base64::encode_config(&bs, base64::URL_SAFE_NO_PAD);
+        s.serialize_str(&enc)
+    }
+}
+
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Serialize)]
 pub struct Name(Bytes);
 
 impl<'de> Deserialize<'de> for Name {
@@ -527,7 +565,7 @@ impl From<&str> for Name {
 }
 
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct Value(Bytes);
 
 impl<'de> Deserialize<'de> for Value {
@@ -541,7 +579,7 @@ impl From<&str> for Value {
 }
 
 
-#[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone)]
 pub struct Tag { name: Name, value: Value }
 
 impl From<(Name, Value)> for Tag {
@@ -553,7 +591,7 @@ impl From<(&str, &str)> for Tag {
 }
 
 
-#[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone)]
 pub struct Tags(Vec<Tag>);
 
 impl Tags {
@@ -581,7 +619,7 @@ impl Absorbable for Tags {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Signature(Bytes);
 
 impl Signature {
@@ -605,11 +643,13 @@ impl<'de> Deserialize<'de> for Signature {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct Tx {
     pub id: TxHash,
     pub data: Data,
+    #[serde(with = "winstons_as_strings")]
     pub quantity: Winstons,
+    #[serde(with = "winstons_as_strings")]
     pub reward: Winstons,
     pub target: EmptyStringAsNone<Address>,
     #[serde(rename = "last_tx")]
@@ -617,10 +657,6 @@ pub struct Tx {
     pub owner: Owner,
     pub tags: Tags,
     pub signature: Signature,
-}
-
-impl AsRef<Tx> for Tx {
-    #[inline] fn as_ref(&self) -> &Self { self }
 }
 
 impl Absorbable for Tx {
@@ -637,10 +673,8 @@ impl Absorbable for Tx {
     }
 }
 
-impl Serialize for Tx {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        unimplemented!()
-    }
+impl AsRef<Tx> for Tx {
+    #[inline] fn as_ref(&self) -> &Self { self }
 }
 
 impl Tx {

@@ -35,6 +35,8 @@ fn tx() {
 
     c.submit(tx).unwrap();
 
+    std::thread::sleep(std::time::Duration::from_secs(1));
+
     assert_eq!(c.balance(w.address()).unwrap(), Winstons::from(0u32));
     assert_eq!(c.balance(&a).unwrap(), q);
 }

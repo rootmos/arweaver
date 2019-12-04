@@ -1,5 +1,5 @@
 use reqwest::Url;
-use arweave::{Error, Address, Winstons, TxHash};
+use arweave::{Error, Address, Winstons, TxHash, winstons_as_numbers};
 use serde::{Serialize, Deserialize};
 
 pub struct Client {
@@ -9,6 +9,7 @@ pub struct Client {
 #[derive(Serialize, Debug)]
 struct FaucetReq<'a> {
     beneficiary: &'a Address,
+    #[serde(with = "winstons_as_numbers")]
     quantity: &'a Winstons,
 }
 
