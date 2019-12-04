@@ -7,12 +7,12 @@ rust:
   - stable
   - beta
 
-before_install:
-  - make start-loom
-  - make wait
-
 install:
   - make build
+
+before_script:
+  - make start-loom
+  - make wait
 
 script:
   - make test
