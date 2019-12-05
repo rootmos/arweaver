@@ -1,5 +1,5 @@
 use reqwest::Url;
-use arweave::{Error, Address, Winstons, TxHash, winstons_as_numbers};
+use arweaver::{Error, Address, Winstons, TxHash, winstons_as_numbers};
 use serde::{Serialize, Deserialize};
 
 pub struct Client {

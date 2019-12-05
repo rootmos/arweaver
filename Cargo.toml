@@ -1,8 +1,15 @@
 [package]
-name = "arweave"
+name = "arweaver"
+description = "An Arweave client"
 version = "0.1.0"
 authors = ["Gustav Behm <me@rootmos.io>"]
 edition = "2018"
+documentation = "https://github.com/rootmos/arweaver"
+homepage = "https://github.com/rootmos/arweaver"
+repository = "https://github.com/rootmos/arweaver"
+keywords = ["arweave"]
+categories = ["api-bindings"]
+license-file = "UNLICENSE"
 
 [dependencies]
 reqwest = "0.9.22"
@@ -15,3 +22,6 @@ openssl = "0.10.25"
 
 [dev-dependencies]
 rand = "0.7.2"
+
+[badges]
+travis-ci = { repository = "rootmos/arweaver" }

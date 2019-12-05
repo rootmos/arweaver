@@ -1,4 +1,4 @@
-use arweave::*;
+use arweaver::*;
 mod settings;
 mod fresh;
 

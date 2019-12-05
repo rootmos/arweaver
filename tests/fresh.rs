@@ -1,6 +1,6 @@
 extern crate rand;
 
-use arweave::{Address, Winstons};
+use arweaver::{Address, Winstons};
 
 pub fn address() -> Address {
     Address::new(rand::random::<[u8; 32]>()).unwrap()

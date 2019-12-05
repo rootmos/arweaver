@@ -1,10 +1,10 @@
 mod loom;
 mod fresh;
-use arweave::{Winstons, Wallet, Anchor, TxBuilder};
+use arweaver::{Winstons, Wallet, Anchor, TxBuilder};
 
 #[test]
 fn faucet() {
-    let c = arweave::Client::new().unwrap();
+    let c = arweaver::Client::new().unwrap();
     let l = loom::Client::new().unwrap();
 
     let a = fresh::address();
@@ -16,7 +16,7 @@ fn faucet() {
 
 #[test]
 fn tx() {
-    let c = arweave::Client::new().unwrap();
+    let c = arweaver::Client::new().unwrap();
     let l = loom::Client::new().unwrap();
 
     let w = Wallet::new().unwrap();
