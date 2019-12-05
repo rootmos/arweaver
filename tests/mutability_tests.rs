@@ -33,9 +33,9 @@ fn tx() {
         .quantity(q.to_owned()).target(a.to_owned())
         .reward(&c).unwrap().sign(&w).unwrap();
 
-    c.submit(tx).unwrap();
-
-    std::thread::sleep(std::time::Duration::from_secs(1));
+    c.submit(&tx).unwrap();
+    let tx0 = l.wait(&tx.id).unwrap();
+    assert_eq!(tx, tx0);
 
     assert_eq!(c.balance(w.address()).unwrap(), Winstons::from(0u32));
     assert_eq!(c.balance(&a).unwrap(), q);

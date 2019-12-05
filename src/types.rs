@@ -16,7 +16,7 @@ use serde::de;
 use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use serde::de::{IntoDeserializer};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EmptyStringAsNone<T>(Option<T>);
 
 impl<T> EmptyStringAsNone<T> {
@@ -494,7 +494,7 @@ impl Serialize for Anchor {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Owner { n: BigNum }
 
 impl Owner {
@@ -619,7 +619,7 @@ impl Absorbable for Tags {
 }
 
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct Signature(Bytes);
 
 impl Signature {
@@ -643,7 +643,7 @@ impl<'de> Deserialize<'de> for Signature {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub struct Tx {
     pub id: TxHash,
     pub data: Data,

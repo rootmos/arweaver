@@ -22,7 +22,7 @@ build:
 .PHONY: start-loom
 start-loom:
 	$(DOCKER) run --detach --rm --publish=$(LOOM_PORT):8000 --name=loom \
-		rootmos/loom@sha256:ed539ea6fbe23533bffd00166ebed8385fc400311ee339e5a9ac0d94247cc708
+		rootmos/loom@sha256:29c71d1aad4a116b1b3af656feaa647b2524f315192dd02dee6eeeb84dc77ca6
 
 .PHONY: wait
 wait:
